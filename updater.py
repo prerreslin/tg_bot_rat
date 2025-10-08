@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Конфигурация репозитория
-GITHUB_REPO = "your-username/tg_bot_rat"  # Замени на свой репозиторий
+GITHUB_REPO = "prerreslin/tg_bot_rat"
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "")  # Опционально для приватных репо
 
 class Updater:
